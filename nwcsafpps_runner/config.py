@@ -31,6 +31,8 @@ MODE = os.environ.get('SMHI_MODE', 'offline')
 
 CONFIG_PATH = os.environ.get('PPSRUNNER_CONFIG_DIR', './')
 CONFIG_FILE = os.environ.get('PPSRUNNER_CONFIG_FILE', 'pps2018_config.yaml')
+LVL1_NPP_PATH = os.environ.get('LVL1_NPP_PATH', None)
+LVL1_EOS_PATH = os.environ.get('LVL1_EOS_PATH', None)
 
 
 def get_config(conf, service=MODE, procenv=''):
