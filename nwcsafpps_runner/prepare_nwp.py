@@ -23,35 +23,23 @@
 """Prepare NWP data for PPS
 """
 
+
 from nwcsafpps_runner.config import get_config
+from nwcsafpps_runner.config import CONFIG_FILE
 import logging
 from glob import glob
 import os
 from datetime import datetime
-from six.moves.configparser import ConfigParser
 from six.moves.configparser import NoOptionError
 import tempfile
 from nwcsafpps_runner.utils import run_command
 from trollsift import Parser
-
+import logging
 LOG = logging.getLogger(__name__)
 
-# CONFIG_PATH = os.environ.get('PPSRUNNER_CONFIG_DIR', './')
-# CONF = ConfigParser()
-# ppsconf_path = os.path.join(CONFIG_PATH, "pps2018_config.ini")
-# LOG.debug("Path to config file = ", str(ppsconf_path))
-# CONF.read(ppsconf_path)
 
-# MODE = os.getenv("SMHI_MODE")
-# if MODE is None:
-#     MODE = "offline"
-
-# LOG.debug('MODE = ' + str(MODE))
-
-# OPTIONS = {}
-# for option, value in CONF.items(MODE, raw=True):
-#     OPTIONS[option] = value
-
+LOG.debug("Path to prepare_nwp config file = " + CONFIG_FILE)
+OPTIONS = get_config(CONFIG_FILE)
 
 OPTIONS = get_config('pps2018_config.ini')
 

@@ -6,6 +6,7 @@
 # Author(s):
 
 #   Adam.Dybbroe <adam.dybbroe@smhi.se>
+#   Erik.Johansson <erik.johansson@smhi.se>
 
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -28,11 +29,13 @@ import sys
 from glob import glob
 from subprocess import Popen, PIPE
 import threading
+
 from six.moves.queue import Queue, Empty
 from datetime import datetime, timedelta
 #
 from nwcsafpps_runner.config import get_config
 from nwcsafpps_runner.config import MODE
+from nwcsafpps_runner.config import CONFIG_FILE
 
 from nwcsafpps_runner.utils import ready2run, publish_pps_files
 from nwcsafpps_runner.utils import (get_sceneid, prepare_pps_arguments,
@@ -46,17 +49,11 @@ from nwcsafpps_runner.utils import (SENSOR_LIST,
 from nwcsafpps_runner.publish_and_listen import FileListener, FilePublisher
 
 from nwcsafpps_runner.prepare_nwp import update_nwp
-
-from six.moves.configparser import NoSectionError, NoOptionError
-
-# from ppsRunAll import pps_run_all_serial
-# from ppsCmaskProb import pps_cmask_prob
+from datetime import datetime, timedelta
 
 import logging
 LOG = logging.getLogger(__name__)
 
-# LVL1_NPP_PATH = os.environ.get('LVL1_NPP_PATH', None)
-# LVL1_EOS_PATH = os.environ.get('LVL1_EOS_PATH', None)
 
 NWP_FLENS = [3, 6, 9, 12, 15, 18, 21, 24]
 
@@ -126,7 +123,6 @@ def pps_worker(scene, publish_q, input_msg, options):
 
         min_thr = options['maximum_pps_processing_time_in_minutes']
         LOG.debug("Maximum allowed  PPS processing time in minutes: %d", min_thr)
-
         # # Run core PPS PGEs in a serial fashion
         # LOG.info("Run PPS module: pps_run_all_serial")
         # pps_run_all_serial(**kwargs)
@@ -141,7 +137,8 @@ def pps_worker(scene, publish_q, input_msg, options):
         py_exec = options.get('python', '/bin/python')
         pps_script = options.get('run_all_script')
         cmd_str = create_pps2018_call_command(py_exec, pps_script, scene, sequence=False)
-
+        if not options['run_pps_cpp']:
+            cmd_str = cmd_str + ' --no_cpp'
         my_env = os.environ.copy()
         for envkey in my_env:
             LOG.debug("ENV: " + str(envkey) + " " + str(my_env[envkey]))
@@ -179,7 +176,6 @@ def pps_worker(scene, publish_q, input_msg, options):
                 pps_cmaprob_proc = Popen(cmdl, shell=True, stderr=PIPE, stdout=PIPE)
             except PpsRunError:
                 LOG.exception("Failed when trying to run the PPS Cma-prob")
-
             timer_cmaprob = threading.Timer(min_thr * 60.0, terminate_process, args=(pps_cmaprob_proc, scene, ))
             timer_cmaprob.start()
 
@@ -192,7 +188,7 @@ def pps_worker(scene, publish_q, input_msg, options):
             out_reader2.join()
             err_reader2.join()
 
-        # Now try perform som time statistics editing with ppsTimeControl.py from
+        # Now try perform some time statistics editing with ppsTimeControl.py from
         # pps:
         do_time_control = True
         try:
@@ -203,8 +199,10 @@ def pps_worker(scene, publish_q, input_msg, options):
 
         if STATISTICS_DIR:
             pps_control_path = STATISTICS_DIR
-        else:
+        elif my_env.get('STATISTICS_DIR'):
             pps_control_path = my_env.get('STATISTICS_DIR')
+        else:
+            pps_control_path = options['stat_path']
 
         if do_time_control:
             LOG.info("Read time control ascii file and generate XML")
@@ -219,12 +217,11 @@ def pps_worker(scene, publish_q, input_msg, options):
             LOG.info(
                 "Time control ascii file candidates: " + str(infiles))
             if len(infiles) == 1:
-                infile = infiles[0]
+                infile = str(infiles[0])
                 LOG.info("Time control ascii file: " + str(infile))
                 ppstime_con = PPSTimeControl(infile)
                 ppstime_con.sum_up_processing_times()
                 ppstime_con.write_xml()
-
         # The PPS post-hooks takes care of publishing the PPS PGEs
         # For the XML files we keep the publishing from here:
         xml_files = get_outputfiles(pps_control_path,
@@ -324,23 +321,40 @@ def pps(options):
     listener_q = Queue()
     publisher_q = Queue()
 
+    files4pps = {}
+    LOG.info("Number of threads: %d", options['number_of_threads'])
+    thread_pool = ThreadPool(options['number_of_threads'])
+
     pub_thread = FilePublisher(publisher_q, options['publish_topic'], runner_name='pps2018_runner')
     pub_thread.start()
     listen_thread = FileListener(listener_q, options['subscribe_topics'])
     listen_thread.start()
+    #:-----------------------
 
-    files4pps = {}
-    LOG.info("Number of threads: %d", options['number_of_threads'])
-    thread_pool = ThreadPool(options['number_of_threads'])
+    # ===========================================================================
+    # from posttroll.subscriber import Subscribe  # @UnresolvedImport
+    # from posttroll.publisher import Publish  # @UnresolvedImport
+    # with Subscribe('', options['subscribe_topics'], True) as sub:
+    #     with Publish('seviri_l1c_runner', 0) as publisher_q:
+    #         while True:
+    #             for msg in sub.recv():
+    # ===========================================================================
+    #:-----------------------
     while True:
-
         try:
             msg = listener_q.get()
         except Empty:
             continue
-
+        #:-----------------------
         LOG.debug(
             "Number of threads currently alive: " + str(threading.active_count()))
+
+        if isinstance(msg.data['sensor'], list):
+            msg.data['sensor'] = msg.data['sensor'][0]
+        if 'orbit_number' not in msg.data.keys():
+            msg.data.update({'orbit_number': 99999})
+        if 'end_time' not in msg.data.keys():
+            msg.data.update({'end_time': 99999})
 
         orbit_number = int(msg.data['orbit_number'])
         platform_name = msg.data['platform_name']
@@ -366,14 +380,18 @@ def pps(options):
             scene['file4pps'] = get_pps_inputfile(platform_name, files4pps[sceneid])
 
             LOG.info('Start a thread preparing the nwp data and run pps...')
-            thread_pool.new_thread(message_uid(msg),
-                                   target=run_nwp_and_pps, args=(scene, NWP_FLENS,
-                                                                 publisher_q,
-                                                                 msg, options,
-                                                                 nwp_handeling_module))
+            if options['number_of_threads'] == 1:
+                run_nwp_and_pps(scene, NWP_FLENS, publisher_q, msg, options)
+            else:
+                thread_pool.new_thread(message_uid(msg),
+                                       target=run_nwp_and_pps, args=(scene, NWP_FLENS,
+                                                                     publisher_q,
+                                                                     msg, options,
+                                                                     nwp_handeling_module))
 
             LOG.debug(
-                "Number of threads currently alive: " + str(threading.active_count()))
+                "Number of threads currently alive: " +
+                str(threading.active_count()))
 
             # Clean the files4pps dict:
             LOG.debug("files4pps: " + str(files4pps))
@@ -396,12 +414,11 @@ def pps(options):
 if __name__ == "__main__":
 
     from logging import handlers
-    OPTIONS = get_config("pps2018_config.ini")
+    LOG.debug("Path to pps2018_runner config file = " + CONFIG_FILE)
+    OPTIONS = get_config(CONFIG_FILE)
     _PPS_LOG_FILE = OPTIONS.get('pps_log_file', _PPS_LOG_FILE)
-
     PPS_OUTPUT_DIR = OPTIONS['pps_outdir']
     STATISTICS_DIR = OPTIONS.get('pps_statistics_dir')
-
     if _PPS_LOG_FILE:
         ndays = int(OPTIONS["log_rotation_days"])
         ncount = int(OPTIONS["log_rotation_backup"])
