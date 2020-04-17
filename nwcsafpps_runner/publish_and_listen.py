@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-# Copyright (c) 2018 Adam.Dybbroe
+# Copyright (c) 2018, 2020 Adam.Dybbroe
 
 # Author(s):
 
@@ -23,16 +23,11 @@
 """Publisher and Listener classes for the PPS runners
 """
 
-import posttroll.subscriber  # @UnresolvedImport
-from posttroll.publisher import Publish  # @UnresolvedImport
+import posttroll.subscriber
+from posttroll.publisher import Publish
 import threading
-try:
-    from utils import (SUPPORTED_PPS_SATELLITES, SUPPORTED_METEOSAT_SATELLITES)  # @UnresolvedImport
-except ImportError as e:
-    print('\n ImportError is only used during developing \n')
-
-    from nwcsafpps_runner.utils import (SUPPORTED_PPS_SATELLITES, 
-                                        SUPPORTED_METEOSAT_SATELLITES)  # @UnresolvedImport
+from nwcsafpps_runner.utils import (SUPPORTED_PPS_SATELLITES,
+                                    SUPPORTED_METEOSAT_SATELLITES)
 
 import logging
 LOG = logging.getLogger(__name__)
