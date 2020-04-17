@@ -381,7 +381,7 @@ def pps(options):
 
             LOG.info('Start a thread preparing the nwp data and run pps...')
             if options['number_of_threads'] == 1:
-                run_nwp_and_pps(scene, NWP_FLENS, publisher_q, msg, options)
+                run_nwp_and_pps(scene, NWP_FLENS, publisher_q, msg, options, nwp_handeling_module)
             else:
                 thread_pool.new_thread(message_uid(msg),
                                        target=run_nwp_and_pps, args=(scene, NWP_FLENS,
