@@ -143,9 +143,9 @@ def pps_worker(scene, publish_q, input_msg, options):
         for envkey in my_env:
             LOG.debug("ENV: " + str(envkey) + " " + str(my_env[envkey]))
 
+        pps_output_dir = my_env.get('SM_PRODUCT_DIR', options.get('pps_outdir', './'))
         LOG.debug("PPS_OUTPUT_DIR = " + str(PPS_OUTPUT_DIR))
         LOG.debug("...from config file = " + str(options['pps_outdir']))
-
         LOG.debug("Run command: " + str(cmd_str))
         try:
             pps_all_proc = Popen(cmd_str, shell=True, stderr=PIPE, stdout=PIPE)
