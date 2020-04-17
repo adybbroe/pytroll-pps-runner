@@ -36,6 +36,7 @@ import socket
 from six.moves.urllib.parse import urlparse
 from datetime import datetime, timedelta
 from nwcsafpps_runner.config import (LVL1_NPP_PATH, LVL1_EOS_PATH)
+import shlex
 import threading
 import logging
 
@@ -608,6 +609,7 @@ def publish_pps_files(input_msg, publish_q, scene, result_files, **kwargs):
         try:
             publish_q.put(pubmsg)
         except:
+            LOG.warning("Failed putting message on the queue, will send it now...")
             publish_q.send(pubmsg)
 
     return
