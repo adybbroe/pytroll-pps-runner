@@ -6,6 +6,7 @@
 # Author(s):
 
 #   Adam.Dybbroe <adam.dybbroe@smhi.se>
+#   Erik.Johansson <erik.johansson@smhi.se>
 
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -33,6 +34,7 @@ from datetime import datetime, timedelta
 #
 from nwcsafpps_runner.config import get_config
 from nwcsafpps_runner.config import MODE
+from nwcsafpps_runner.config import CONFIG_FILE
 
 from nwcsafpps_runner.utils import ready2run, publish_pps_files
 from nwcsafpps_runner.utils import (get_sceneid, prepare_pps_arguments,
@@ -46,11 +48,7 @@ from nwcsafpps_runner.utils import (SENSOR_LIST,
 from nwcsafpps_runner.publish_and_listen import FileListener, FilePublisher
 
 from nwcsafpps_runner.prepare_nwp import update_nwp
-
-from six.moves.configparser import NoSectionError, NoOptionError
-
-# from ppsRunAll import pps_run_all_serial
-# from ppsCmaskProb import pps_cmask_prob
+from datetime import datetime, timedelta
 
 import logging
 LOG = logging.getLogger(__name__)
@@ -141,11 +139,14 @@ def pps_worker(scene, publish_q, input_msg, options):
         py_exec = options.get('python', '/bin/python')
         pps_script = options.get('run_all_script')
         cmd_str = create_pps2018_call_command(py_exec, pps_script, scene, sequence=False)
-
+        run_cpp = options.get('run_pps_cpp', None)
+        if not run_cpp:
+            cmd_str = cmd_str + ' --no_cpp'
         my_env = os.environ.copy()
         for envkey in my_env:
             LOG.debug("ENV: " + str(envkey) + " " + str(my_env[envkey]))
 
+        pps_output_dir = my_env.get('SM_PRODUCT_DIR', options.get('pps_outdir', './'))
         LOG.debug("PPS_OUTPUT_DIR = " + str(PPS_OUTPUT_DIR))
         LOG.debug("...from config file = " + str(options['pps_outdir']))
 
@@ -203,8 +204,10 @@ def pps_worker(scene, publish_q, input_msg, options):
 
         if STATISTICS_DIR:
             pps_control_path = STATISTICS_DIR
-        else:
+        elif my_env.get('STATISTICS_DIR'):
             pps_control_path = my_env.get('STATISTICS_DIR')
+        else:
+            pps_control_path = options.get('stat_path', '/tmp')
 
         if do_time_control:
             LOG.info("Read time control ascii file and generate XML")
@@ -219,7 +222,7 @@ def pps_worker(scene, publish_q, input_msg, options):
             LOG.info(
                 "Time control ascii file candidates: " + str(infiles))
             if len(infiles) == 1:
-                infile = infiles[0]
+                infile = str(infiles[0])
                 LOG.info("Time control ascii file: " + str(infile))
                 ppstime_con = PPSTimeControl(infile)
                 ppstime_con.sum_up_processing_times()
@@ -324,23 +327,41 @@ def pps(options):
     listener_q = Queue()
     publisher_q = Queue()
 
+    files4pps = {}
+    nthreads = options.get('number_of_threads', 1)
+    LOG.info("Number of threads: %d", nthreads)
+    thread_pool = ThreadPool(nthreads)
+
     pub_thread = FilePublisher(publisher_q, options['publish_topic'], runner_name='pps2018_runner')
     pub_thread.start()
     listen_thread = FileListener(listener_q, options['subscribe_topics'])
     listen_thread.start()
 
-    files4pps = {}
-    LOG.info("Number of threads: %d", options['number_of_threads'])
-    thread_pool = ThreadPool(options['number_of_threads'])
+    # ===========================================================================
+    # from posttroll.subscriber import Subscribe  # @UnresolvedImport
+    # from posttroll.publisher import Publish  # @UnresolvedImport
+    # with Subscribe('', options['subscribe_topics'], True) as sub:
+    #     with Publish('seviri_l1c_runner', 0) as publisher_q:
+    #         while True:
+    #             for msg in sub.recv():
+    # ===========================================================================
+    #:-----------------------
     while True:
 
         try:
             msg = listener_q.get()
         except Empty:
             continue
-
+        #:-----------------------
         LOG.debug(
             "Number of threads currently alive: " + str(threading.active_count()))
+
+        if 'sensor' in msg.data.keys() and isinstance(msg.data['sensor'], list):
+            msg.data['sensor'] = msg.data['sensor'][0]
+        if 'orbit_number' not in msg.data.keys():
+            msg.data.update({'orbit_number': 99999})
+        if 'end_time' not in msg.data.keys():
+            msg.data.update({'end_time': 99999})
 
         orbit_number = int(msg.data['orbit_number'])
         platform_name = msg.data['platform_name']
@@ -366,14 +387,18 @@ def pps(options):
             scene['file4pps'] = get_pps_inputfile(platform_name, files4pps[sceneid])
 
             LOG.info('Start a thread preparing the nwp data and run pps...')
-            thread_pool.new_thread(message_uid(msg),
-                                   target=run_nwp_and_pps, args=(scene, NWP_FLENS,
-                                                                 publisher_q,
-                                                                 msg, options,
-                                                                 nwp_handeling_module))
+            if nthreads == 1:
+                run_nwp_and_pps(scene, NWP_FLENS, publisher_q, msg, options, nwp_handeling_module)
+            else:
+                thread_pool.new_thread(message_uid(msg),
+                                       target=run_nwp_and_pps, args=(scene, NWP_FLENS,
+                                                                     publisher_q,
+                                                                     msg, options,
+                                                                     nwp_handeling_module))
 
             LOG.debug(
-                "Number of threads currently alive: " + str(threading.active_count()))
+                "Number of threads currently alive: " +
+                str(threading.active_count()))
 
             # Clean the files4pps dict:
             LOG.debug("files4pps: " + str(files4pps))
@@ -396,7 +421,8 @@ def pps(options):
 if __name__ == "__main__":
 
     from logging import handlers
-    OPTIONS = get_config("pps2018_config.ini")
+    LOG.debug("Path to pps2018_runner config file = " + CONFIG_FILE)
+    OPTIONS = get_config(CONFIG_FILE)
     _PPS_LOG_FILE = OPTIONS.get('pps_log_file', _PPS_LOG_FILE)
 
     PPS_OUTPUT_DIR = OPTIONS['pps_outdir']
