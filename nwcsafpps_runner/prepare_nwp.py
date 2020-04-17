@@ -24,6 +24,7 @@
 """
 
 from nwcsafpps_runner.config import get_config
+from nwcsafpps_runner.config import CONFIG_FILE
 import logging
 from glob import glob
 import os
@@ -42,16 +43,8 @@ LOG = logging.getLogger(__name__)
 # LOG.debug("Path to config file = ", str(ppsconf_path))
 # CONF.read(ppsconf_path)
 
-# MODE = os.getenv("SMHI_MODE")
-# if MODE is None:
-#     MODE = "offline"
-
-# LOG.debug('MODE = ' + str(MODE))
-
-# OPTIONS = {}
-# for option, value in CONF.items(MODE, raw=True):
-#     OPTIONS[option] = value
-
+LOG.debug("Path to prepare_nwp config file = " + CONFIG_FILE)
+OPTIONS = get_config(CONFIG_FILE)
 
 OPTIONS = get_config('pps2018_config.ini')
 
