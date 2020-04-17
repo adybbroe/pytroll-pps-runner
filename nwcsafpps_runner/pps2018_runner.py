@@ -137,7 +137,8 @@ def pps_worker(scene, publish_q, input_msg, options):
         py_exec = options.get('python', '/bin/python')
         pps_script = options.get('run_all_script')
         cmd_str = create_pps2018_call_command(py_exec, pps_script, scene, sequence=False)
-        if not options['run_pps_cpp']:
+        run_cpp = options.get('run_pps_cpp', None)
+        if not run_cpp:
             cmd_str = cmd_str + ' --no_cpp'
         my_env = os.environ.copy()
         for envkey in my_env:
@@ -222,6 +223,7 @@ def pps_worker(scene, publish_q, input_msg, options):
                 ppstime_con = PPSTimeControl(infile)
                 ppstime_con.sum_up_processing_times()
                 ppstime_con.write_xml()
+
         # The PPS post-hooks takes care of publishing the PPS PGEs
         # For the XML files we keep the publishing from here:
         xml_files = get_outputfiles(pps_control_path,
@@ -322,8 +324,9 @@ def pps(options):
     publisher_q = Queue()
 
     files4pps = {}
-    LOG.info("Number of threads: %d", options['number_of_threads'])
-    thread_pool = ThreadPool(options['number_of_threads'])
+    nthreads = options.get('number_of_threads', 1)
+    LOG.info("Number of threads: %d", nthreads)
+    thread_pool = ThreadPool(nthreads)
 
     pub_thread = FilePublisher(publisher_q, options['publish_topic'], runner_name='pps2018_runner')
     pub_thread.start()
@@ -349,7 +352,7 @@ def pps(options):
         LOG.debug(
             "Number of threads currently alive: " + str(threading.active_count()))
 
-        if isinstance(msg.data['sensor'], list):
+        if 'sensor' in msg.data.keys() and isinstance(msg.data['sensor'], list):
             msg.data['sensor'] = msg.data['sensor'][0]
         if 'orbit_number' not in msg.data.keys():
             msg.data.update({'orbit_number': 99999})
@@ -380,7 +383,7 @@ def pps(options):
             scene['file4pps'] = get_pps_inputfile(platform_name, files4pps[sceneid])
 
             LOG.info('Start a thread preparing the nwp data and run pps...')
-            if options['number_of_threads'] == 1:
+            if nthreads == 1:
                 run_nwp_and_pps(scene, NWP_FLENS, publisher_q, msg, options, nwp_handeling_module)
             else:
                 thread_pool.new_thread(message_uid(msg),
