@@ -203,7 +203,7 @@ def pps_worker(scene, publish_q, input_msg, options):
         elif my_env.get('STATISTICS_DIR'):
             pps_control_path = my_env.get('STATISTICS_DIR')
         else:
-            pps_control_path = options['stat_path']
+            pps_control_path = options.get('stat_path', '/tmp')
 
         if do_time_control:
             LOG.info("Read time control ascii file and generate XML")
