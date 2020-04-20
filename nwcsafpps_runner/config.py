@@ -20,7 +20,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-"""Utility functions for NWCSAF/pps runner(s)
+"""Reading configuration settings for NWCSAF/pps runner(s)
 """
 
 import os
