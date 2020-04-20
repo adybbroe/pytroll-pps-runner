@@ -74,7 +74,7 @@ class FileListener(threading.Thread):
         if (msg.data['platform_name'] not in SUPPORTED_METEOSAT_SATELLITES):
             if ('orbit_number' not in msg.data):
                 LOG.warning("Message is lacking crucial field: orbit_number not present!")
-            return False
+                return False
         if (msg.data['platform_name'] not in SUPPORTED_PPS_SATELLITES):
             LOG.info(str(msg.data['platform_name']) + ": " +
                      "Not a NOAA/Metop/S-NPP/Terra/Aqua scene. Continue...")
