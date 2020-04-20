@@ -26,9 +26,7 @@
 import os
 import stat
 import netifaces
-import shlex
 from glob import glob
-
 from subprocess import Popen, PIPE
 from posttroll.message import Message
 from trollsift.parser import parse
