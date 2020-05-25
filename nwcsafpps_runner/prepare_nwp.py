@@ -38,13 +38,13 @@ from nwcsafpps_runner.config import CONFIG_PATH  # @UnresolvedImport
 from nwcsafpps_runner.utils import run_command
 
 
-#===============================================================================
+# ===============================================================================
 # from config import get_config  # @UnresolvedImport
 # from config import CONFIG_FILE  # @UnresolvedImport
 # from config import CONFIG_PATH  # @UnresolvedImport
 # from utils import run_command
-#===============================================================================
-    
+# ===============================================================================
+
 import logging
 LOG = logging.getLogger(__name__)
 
@@ -147,12 +147,12 @@ def update_nwp(starttime, nlengths):
                 raise NwpPrepareError(
                     'Failed parsing forecast_step in file name. Check config and filename timestamp.')
 
-        LOG.debug(analysis_time, starttime)
+        LOG.debug("Analysis time and start time: %s, %s", str(analysis_time), str(starttime))
         if analysis_time < starttime:
-            print("skip analysis")
+            LOG.debug("Skip analysis. Analysis time smaller than start time")
             continue
         if forecast_step not in nlengths:
-            LOG.debug("skip step", forecast_step, nlengths)
+            LOG.debug("Skip forecast step and forecast length: %s, %s", str(forecast_step), str(nlengths))
             continue
 
         LOG.info("timestamp, step: " + str(timestamp) + ' ' + str(forecast_step))
